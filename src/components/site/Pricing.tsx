@@ -1,0 +1,88 @@
+import { Check, Sparkles } from "lucide-react";
+
+const plans = [
+  {
+    name: "Free",
+    price: "$0",
+    period: "/forever",
+    desc: "For trying it out and personal use.",
+    features: ["50 images / month", "Standard resolution", "Web app access", "Community support"],
+    cta: "Get Started",
+    highlight: false,
+  },
+  {
+    name: "Pro",
+    price: "$19",
+    period: "/month",
+    desc: "For creators and small teams.",
+    features: ["2,000 images / month", "4K resolution", "Batch processing", "API access (10k calls)", "Priority support"],
+    cta: "Start Free Trial",
+    highlight: true,
+  },
+  {
+    name: "Enterprise",
+    price: "Custom",
+    period: "",
+    desc: "For large teams with custom needs.",
+    features: ["Unlimited images", "Dedicated infrastructure", "SLA & SOC2", "Custom AI models", "24/7 support"],
+    cta: "Contact Sales",
+    highlight: false,
+  },
+];
+
+export function Pricing() {
+  return (
+    <section id="pricing" className="px-4 py-24">
+      <div className="mx-auto max-w-6xl">
+        <div className="text-center max-w-2xl mx-auto">
+          <p className="text-sm font-semibold uppercase tracking-wider text-gradient">Pricing</p>
+          <h2 className="mt-3 text-4xl font-bold tracking-tight sm:text-5xl">Simple, transparent pricing</h2>
+          <p className="mt-4 text-muted-foreground">Start free. Upgrade when you need more power.</p>
+        </div>
+
+        <div className="mt-14 grid gap-6 lg:grid-cols-3">
+          {plans.map((p, i) => (
+            <div
+              key={p.name}
+              className={`relative rounded-3xl p-8 transition hover:-translate-y-2 animate-fade-in ${
+                p.highlight
+                  ? "bg-gradient-brand text-white shadow-glow scale-[1.03]"
+                  : "glass shadow-soft hover:shadow-glow"
+              }`}
+              style={{ animationDelay: `${i * 0.1}s` }}
+            >
+              {p.highlight && (
+                <div className="absolute -top-3 left-1/2 -translate-x-1/2 inline-flex items-center gap-1 rounded-full bg-white px-3 py-1 text-xs font-bold text-[var(--neon-purple)] shadow-glow">
+                  <Sparkles className="h-3 w-3" /> MOST POPULAR
+                </div>
+              )}
+              <h3 className="text-lg font-semibold">{p.name}</h3>
+              <p className={`mt-1 text-sm ${p.highlight ? "text-white/80" : "text-muted-foreground"}`}>{p.desc}</p>
+              <div className="mt-6 flex items-baseline gap-1">
+                <span className="text-5xl font-bold">{p.price}</span>
+                <span className={p.highlight ? "text-white/80" : "text-muted-foreground"}>{p.period}</span>
+              </div>
+              <button
+                className={`mt-6 w-full rounded-xl py-3 text-sm font-semibold transition hover:scale-[1.02] ${
+                  p.highlight
+                    ? "bg-white text-[var(--neon-purple)] shadow-soft"
+                    : "bg-gradient-brand text-white shadow-glow"
+                }`}
+              >
+                {p.cta}
+              </button>
+              <ul className="mt-7 space-y-3">
+                {p.features.map((f) => (
+                  <li key={f} className="flex items-start gap-2 text-sm">
+                    <Check className={`mt-0.5 h-4 w-4 shrink-0 ${p.highlight ? "text-white" : "text-[var(--neon-purple)]"}`} />
+                    <span>{f}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
