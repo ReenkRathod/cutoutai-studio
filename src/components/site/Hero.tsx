@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type MouseEvent } from "react";
-import { Upload, Sparkles, Zap, ImageIcon, History, X } from "lucide-react";
+import { Upload, Sparkles, Zap, ImageIcon, History, X, Download } from "lucide-react";
 import { BeforeAfter } from "./BeforeAfter";
 import {
   addRecentImage,
@@ -32,6 +32,13 @@ function toHttpsIfNeeded(url: string): string {
   return url;
 }
 
+function extensionForImageBlobType(mime: string): string {
+  if (mime === "image/jpeg" || mime === "image/jpg") return ".jpg";
+  if (mime === "image/webp") return ".webp";
+  if (mime === "image/png") return ".png";
+  return ".png";
+}
+
 async function sendImageBinaryToWebhook(file: File): Promise<string> {
   const res = await fetch(REMOVE_BACKGROUND_WEBHOOK, {
     method: "POST",
@@ -54,6 +61,9 @@ export function Hero() {
   const [error, setError] = useState<string | null>(null);
   const [drag, setDrag] = useState(false);
   const [recentImages, setRecentImages] = useState<RecentImage[]>([]);
+  const [sourceFileName, setSourceFileName] = useState<string | null>(null);
+  const [downloading, setDownloading] = useState(false);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const previousOriginalUrlRef = useRef<string | null>(null);
 
@@ -76,8 +86,10 @@ export function Hero() {
     }
 
     setError(null);
+    setDownloadError(null);
     setProcessedImage(null);
     setProcessing(true);
+    setSourceFileName(f.name?.trim() || "image");
 
     const nextOriginalUrl = URL.createObjectURL(f);
     setOriginalImage(nextOriginalUrl);
@@ -128,7 +140,40 @@ export function Hero() {
     setOriginalImage(item.originalThumb);
     setProcessedImage(item.resultUrl);
     setError(null);
+    setDownloadError(null);
+    setSourceFileName(item.fileName);
   }, []);
+
+  const downloadProcessed = useCallback(async () => {
+    if (!processedImage) return;
+    setDownloading(true);
+    setDownloadError(null);
+    try {
+      const res = await fetch(processedImage);
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+      const blob = await res.blob();
+      const ext = extensionForImageBlobType(blob.type || "image/png");
+      const rawBase = (sourceFileName ?? "cutout").replace(/\.[^./\\]+$/, "");
+      const base = rawBase || "cutout";
+      const objectUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = objectUrl;
+      a.download = `${base}-no-bg${ext}`;
+      a.rel = "noopener";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(objectUrl);
+    } catch {
+      setDownloadError(
+        "Download failed (often due to browser security). Right-click the result and use “Save image as…”.",
+      );
+    } finally {
+      setDownloading(false);
+    }
+  }, [processedImage, sourceFileName]);
 
   const deleteRecent = useCallback((e: MouseEvent, id: string) => {
     e.stopPropagation();
@@ -230,6 +275,22 @@ export function Hero() {
                         </div>
                       )}
                     </div>
+                    {processedImage && !processing && (
+                      <div className="mt-2 space-y-1">
+                        <button
+                          type="button"
+                          onClick={() => void downloadProcessed()}
+                          disabled={downloading}
+                          className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-border bg-background/90 px-3 py-2 text-xs font-semibold shadow-sm transition hover:bg-muted/80 disabled:pointer-events-none disabled:opacity-60 sm:w-auto"
+                        >
+                          <Download className="h-3.5 w-3.5 shrink-0" />
+                          {downloading ? "Preparing download…" : "Download result"}
+                        </button>
+                        {downloadError && (
+                          <p className="text-xs text-red-400">{downloadError}</p>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
                 <p className="text-sm text-muted-foreground">
