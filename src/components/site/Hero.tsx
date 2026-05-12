@@ -1,17 +1,147 @@
-import { useRef, useState } from "react";
-import { Upload, Sparkles, Zap, ImageIcon } from "lucide-react";
+import { useCallback, useEffect, useRef, useState, type MouseEvent } from "react";
+import { Upload, Sparkles, Zap, ImageIcon, History, X } from "lucide-react";
 import { BeforeAfter } from "./BeforeAfter";
+import {
+  addRecentImage,
+  clearRecentImages,
+  fileToThumbDataUrl,
+  loadRecentImages,
+  removeRecentImage,
+  type RecentImage,
+} from "@/lib/recent-images";
+
+const REMOVE_BACKGROUND_WEBHOOK =
+  "https://allnighter.app.n8n.cloud/webhook/remove-background";
+
+function parseWebhookImageUrl(json: unknown): string {
+  if (!json || typeof json !== "object" || !("url" in json)) {
+    throw new Error("Invalid response: expected JSON with a url field.");
+  }
+  const url = (json as { url: unknown }).url;
+  if (typeof url !== "string" || !url.trim()) {
+    throw new Error("Invalid response: url must be a non-empty string.");
+  }
+  return url.trim();
+}
+
+/** Avoid mixed-content blocking when the page is served over HTTPS. */
+function toHttpsIfNeeded(url: string): string {
+  if (url.startsWith("http://")) {
+    return `https://${url.slice("http://".length)}`;
+  }
+  return url;
+}
+
+async function sendImageBinaryToWebhook(file: File): Promise<string> {
+  const res = await fetch(REMOVE_BACKGROUND_WEBHOOK, {
+    method: "POST",
+    headers: {
+      "Content-Type": file.type || "application/octet-stream",
+    },
+    body: file,
+  });
+  if (!res.ok) {
+    throw new Error(`Webhook HTTP ${res.status}`);
+  }
+  const data: unknown = await res.json();
+  return toHttpsIfNeeded(parseWebhookImageUrl(data));
+}
 
 export function Hero() {
-  const [file, setFile] = useState<string | null>(null);
+  const [originalImage, setOriginalImage] = useState<string | null>(null);
+  const [processedImage, setProcessedImage] = useState<string | null>(null);
+  const [processing, setProcessing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [drag, setDrag] = useState(false);
+  const [recentImages, setRecentImages] = useState<RecentImage[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
+  const previousOriginalUrlRef = useRef<string | null>(null);
 
-  const handleFile = (f?: File) => {
-    if (f && f.type.startsWith("image/")) {
-      setFile(URL.createObjectURL(f));
+  useEffect(() => {
+    setRecentImages(loadRecentImages());
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (previousOriginalUrlRef.current?.startsWith("blob:")) {
+        URL.revokeObjectURL(previousOriginalUrlRef.current);
+      }
+    };
+  }, []);
+
+  const handleFile = useCallback(async (f?: File | null) => {
+    if (!f || !f.type.startsWith("image/")) {
+      setError("Please upload a valid image file.");
+      return;
     }
-  };
+
+    setError(null);
+    setProcessedImage(null);
+    setProcessing(true);
+
+    const nextOriginalUrl = URL.createObjectURL(f);
+    setOriginalImage(nextOriginalUrl);
+
+    if (previousOriginalUrlRef.current?.startsWith("blob:")) {
+      URL.revokeObjectURL(previousOriginalUrlRef.current);
+    }
+    previousOriginalUrlRef.current = nextOriginalUrl;
+
+    try {
+      const imageUrl = await sendImageBinaryToWebhook(f);
+      setProcessedImage(imageUrl);
+      const thumb = await fileToThumbDataUrl(f);
+      addRecentImage({ resultUrl: imageUrl, fileName: f.name || "image", originalThumb: thumb });
+      setRecentImages(loadRecentImages());
+    } catch {
+      setProcessedImage(null);
+      setError(
+        "Background removal failed. Check your connection, CORS settings, or try another image.",
+      );
+    } finally {
+      setProcessing(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const handlePaste = (event: ClipboardEvent) => {
+      const imageItem = Array.from(event.clipboardData?.items ?? []).find((item) =>
+        item.type.startsWith("image/"),
+      );
+      if (!imageItem) return;
+
+      const file = imageItem.getAsFile();
+      if (file) {
+        void handleFile(file);
+      }
+    };
+
+    window.addEventListener("paste", handlePaste);
+    return () => window.removeEventListener("paste", handlePaste);
+  }, [handleFile]);
+
+  const openRecent = useCallback((item: RecentImage) => {
+    if (previousOriginalUrlRef.current?.startsWith("blob:")) {
+      URL.revokeObjectURL(previousOriginalUrlRef.current);
+    }
+    previousOriginalUrlRef.current = item.originalThumb ?? null;
+    setOriginalImage(item.originalThumb);
+    setProcessedImage(item.resultUrl);
+    setError(null);
+  }, []);
+
+  const deleteRecent = useCallback((e: MouseEvent, id: string) => {
+    e.stopPropagation();
+    removeRecentImage(id);
+    setRecentImages(loadRecentImages());
+  }, []);
+
+  const clearRecent = useCallback(() => {
+    clearRecentImages();
+    setRecentImages([]);
+  }, []);
+
+  const showPreview = Boolean(originalImage || processedImage || processing);
 
   return (
     <section id="home" className="relative pt-32 pb-20 px-4 overflow-hidden">
@@ -49,7 +179,7 @@ export function Hero() {
             onDrop={(e) => {
               e.preventDefault();
               setDrag(false);
-              handleFile(e.dataTransfer.files[0]);
+              void handleFile(e.dataTransfer.files[0]);
             }}
             onClick={() => inputRef.current?.click()}
             className={`mt-8 cursor-pointer rounded-2xl border-2 border-dashed p-8 text-center transition ${
@@ -61,15 +191,50 @@ export function Hero() {
               type="file"
               accept="image/*"
               hidden
-              onChange={(e) => handleFile(e.target.files?.[0])}
+              onChange={(e) => void handleFile(e.target.files?.[0])}
             />
-            {file ? (
-              <div className="flex items-center justify-center gap-3">
-                <img src={file} alt="Preview" className="h-16 w-16 rounded-lg object-cover" />
-                <div className="text-sm">
-                  <p className="font-semibold">Image ready!</p>
-                  <p className="text-muted-foreground">Click to upload another</p>
+            {showPreview ? (
+              <div className="space-y-4">
+                <div className={`grid gap-3 ${originalImage ? "sm:grid-cols-2" : "sm:grid-cols-1"}`}>
+                  {originalImage ? (
+                    <div>
+                      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        Original
+                      </p>
+                      <img src={originalImage} alt="Original upload" className="h-36 w-full rounded-lg object-cover" />
+                    </div>
+                  ) : processedImage ? (
+                    <div>
+                      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        Original
+                      </p>
+                      <div className="grid h-36 place-items-center rounded-lg border border-dashed border-border bg-muted/30 px-3 text-center text-xs text-muted-foreground">
+                        No local preview for this saved result. Upload again to compare side by side.
+                      </div>
+                    </div>
+                  ) : null}
+                  <div>
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      Background Cleared
+                    </p>
+                    <div className="checker-bg h-36 overflow-hidden rounded-lg">
+                      {processedImage ? (
+                        <img
+                          src={processedImage}
+                          alt="Processed image with background removed"
+                          className="h-full w-full object-contain"
+                        />
+                      ) : (
+                        <div className="grid h-full place-items-center text-xs text-muted-foreground">
+                          {processing ? "Processing image..." : "No output yet"}
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
+                <p className="text-sm text-muted-foreground">
+                  Click to upload again, drag an image here, or paste with Ctrl+V.
+                </p>
               </div>
             ) : (
               <>
@@ -77,10 +242,61 @@ export function Hero() {
                   <Upload className="h-6 w-6 text-white" />
                 </div>
                 <p className="mt-3 font-semibold">Drag & drop your image here</p>
-                <p className="text-sm text-muted-foreground">or click to browse · PNG, JPG up to 10MB</p>
+                <p className="text-sm text-muted-foreground">
+                  Click Upload Image, drag here, or paste (Ctrl+V) · PNG, JPG up to 10MB
+                </p>
               </>
             )}
+            {processing && <p className="mt-3 text-sm font-medium">Removing background...</p>}
+            {error && <p className="mt-3 text-sm text-red-400">{error}</p>}
           </div>
+
+          {recentImages.length > 0 && (
+            <div className="mt-6 rounded-2xl border border-border glass p-4">
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 text-sm font-semibold">
+                  <History className="h-4 w-4 text-[var(--neon-purple)]" />
+                  <span>Saved on this device</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={clearRecent}
+                  className="text-xs font-medium text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+                >
+                  Clear all
+                </button>
+              </div>
+              <div className="flex gap-3 overflow-x-auto pb-1">
+                {recentImages.map((item) => (
+                  <div key={item.id} className="group relative shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => openRecent(item)}
+                      className="checker-bg block w-20 overflow-hidden rounded-xl border border-border ring-offset-background transition hover:ring-2 hover:ring-[var(--neon-purple)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--neon-purple)]"
+                      title={item.fileName}
+                    >
+                      <img
+                        src={item.resultUrl}
+                        alt=""
+                        className="aspect-square h-20 w-20 object-contain"
+                      />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => deleteRecent(e, item.id)}
+                      className="absolute -right-1 -top-1 grid h-6 w-6 place-items-center rounded-full border border-border bg-background text-muted-foreground opacity-0 shadow-sm transition hover:text-foreground group-hover:opacity-100"
+                      aria-label="Remove from saved"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">
+                Up to 24 results stored in your browser (this computer only). Click a thumbnail to open it.
+              </p>
+            </div>
+          )}
 
           <div className="mt-6 flex flex-wrap gap-3">
             <button
