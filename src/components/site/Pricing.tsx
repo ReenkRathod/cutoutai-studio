@@ -3,7 +3,7 @@ import { Check, Sparkles } from "lucide-react";
 const plans = [
   {
     name: "Free",
-    price: "$0",
+    price: "Rs.0",
     period: "/forever",
     desc: "For trying it out and personal use.",
     features: ["50 images / month", "Standard resolution", "Web app access", "Community support"],
@@ -12,7 +12,7 @@ const plans = [
   },
   {
     name: "Pro",
-    price: "$1499",
+    price: "Rs.1499",
     period: "/month",
     desc: "For creators and small teams.",
     features: ["2,000 images / month", "4K resolution", "Batch processing", "API access (10k calls)", "Priority support"],
