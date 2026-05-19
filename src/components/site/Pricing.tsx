@@ -12,7 +12,7 @@ const plans = [
   },
   {
     name: "Pro",
-    price: "$19",
+    price: "$1499",
     period: "/month",
     desc: "For creators and small teams.",
     features: ["2,000 images / month", "4K resolution", "Batch processing", "API access (10k calls)", "Priority support"],
