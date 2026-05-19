@@ -1,23 +1,27 @@
+import { useState } from "react";
 import { Check, Sparkles } from "lucide-react";
+import { openRazorpayCheckout } from "@/lib/razorpay-checkout";
 
 const plans = [
   {
     name: "Free",
-    price: "Rs.0",
+    price: "₹0",
     period: "/forever",
     desc: "For trying it out and personal use.",
     features: ["50 images / month", "Standard resolution", "Web app access", "Community support"],
     cta: "Get Started",
     highlight: false,
+    amountInRupees: 0,
   },
   {
     name: "Pro",
-    price: "Rs.1499",
+    price: "₹1599",
     period: "/month",
     desc: "For creators and small teams.",
     features: ["2,000 images / month", "4K resolution", "Batch processing", "API access (10k calls)", "Priority support"],
-    cta: "Start Free Trial",
+    cta: "Upgrade to Pro",
     highlight: true,
+    amountInRupees: 1599,
   },
   {
     name: "Enterprise",
@@ -27,10 +31,97 @@ const plans = [
     features: ["Unlimited images", "Dedicated infrastructure", "SLA & SOC2", "Custom AI models", "24/7 support"],
     cta: "Contact Sales",
     highlight: false,
+    amountInRupees: 0,
   },
 ];
 
 export function Pricing() {
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
+  const [checkoutError, setCheckoutError] = useState<string | null>(null);
+
+  const payWithRazorpay = async (amountInRupees: number, planName: string) => {
+    if (checkoutLoading) return;
+    setCheckoutError(null);
+    setCheckoutLoading(true);
+
+    try {
+      const amountPaise = Math.round(amountInRupees * 100);
+      const createOrderRes = await fetch("/api/create-order", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          amount: amountPaise,
+          currency: "INR",
+          receipt: `${planName.toLowerCase()}-${Date.now()}`,
+          notes: { plan: planName },
+        }),
+      });
+
+      if (!createOrderRes.ok) {
+        const errBody = (await createOrderRes.json().catch(() => null)) as {
+          error?: string;
+          details?: unknown;
+        } | null;
+        const detail =
+          typeof errBody?.details === "object" && errBody.details !== null
+            ? JSON.stringify(errBody.details)
+            : String(errBody?.details ?? "");
+        throw new Error(
+          errBody?.error
+            ? `${errBody.error}${detail ? `: ${detail}` : ""}`
+            : `Order creation failed (HTTP ${createOrderRes.status})`,
+        );
+      }
+
+      const { keyId, order_id, amount, currency } = (await createOrderRes.json()) as {
+        keyId: string;
+        order_id: string;
+        amount: number;
+        currency: string;
+      };
+
+      const checkoutKeyId = import.meta.env.VITE_RAZORPAY_KEY_ID || keyId;
+
+      await openRazorpayCheckout({
+        keyId: checkoutKeyId,
+        orderId: order_id,
+        amount,
+        currency,
+        description: `${planName} plan (one-time)`,
+        onSuccess: async (response) => {
+          try {
+            const verifyRes = await fetch("/api/verify-payment", {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify(response),
+            });
+            const verify = (await verifyRes.json()) as { success?: boolean; verified?: boolean };
+            if (!verifyRes.ok || (!verify.success && !verify.verified)) {
+              throw new Error("Payment signature verification failed");
+            }
+
+            alert("Payment successful! You can now continue.");
+            setCheckoutError(null);
+          } catch (e) {
+            setCheckoutError(e instanceof Error ? e.message : "Payment verification failed");
+          } finally {
+            setCheckoutLoading(false);
+          }
+        },
+        onFailure: (message) => {
+          setCheckoutLoading(false);
+          setCheckoutError(message);
+        },
+        onDismiss: () => {
+          setCheckoutLoading(false);
+        },
+      });
+    } catch (e) {
+      setCheckoutLoading(false);
+      setCheckoutError(e instanceof Error ? e.message : "Payment failed");
+    }
+  };
+
   return (
     <section id="pricing" className="px-4 py-24">
       <div className="mx-auto max-w-6xl">
@@ -68,8 +159,13 @@ export function Pricing() {
                     ? "bg-white text-[var(--neon-purple)] shadow-soft"
                     : "bg-gradient-brand text-white shadow-glow"
                 }`}
+                type="button"
+                disabled={checkoutLoading && p.amountInRupees > 0}
+                onClick={() => {
+                  if (p.amountInRupees > 0) void payWithRazorpay(p.amountInRupees, p.name);
+                }}
               >
-                {p.cta}
+                {checkoutLoading && p.amountInRupees > 0 ? "Processing..." : p.cta}
               </button>
               <ul className="mt-7 space-y-3">
                 {p.features.map((f) => (
@@ -82,6 +178,8 @@ export function Pricing() {
             </div>
           ))}
         </div>
+
+        {checkoutError && <p className="mt-6 text-center text-xs text-red-400">{checkoutError}</p>}
       </div>
     </section>
   );

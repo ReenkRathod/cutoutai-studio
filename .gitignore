@@ -19,6 +19,11 @@ dist-ssr
 # Vercel (local Nitro prebuild / output)
 .vercel/
 
+# Environment (secrets)
+.env
+.env.local
+.env.*.local
+
 # Wrangler / Cloudflare
 .wrangler/
 .dev.vars
