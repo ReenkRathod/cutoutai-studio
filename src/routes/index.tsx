@@ -12,17 +12,16 @@ export const Route = createFileRoute("/")({
   component: Index,
   head: () => ({
     meta: [
-      { title: "CutoutAI — Clear Backgrounds, Effortlessly" },
-      {
-        name: "description",
-        content:
-          "CutoutAI removes image backgrounds in seconds with AI. High-quality cutouts, batch processing, and a developer API.",
-      },
-      { property: "og:title", content: "CutoutAI — Clear Backgrounds, Effortlessly" },
-      {
-        property: "og:description",
-        content: "AI-powered background removal for creators, teams, and developers.",
-      },
+      { charSet: "utf-8" },
+      { name: "viewport", content: "width=device-width, initial-scale=1" },
+      { title: "CutoutAI Studio — Clear Backgrounds, Effortlessly" },
+      { name: "description", content: "CutoutAI removes image backgrounds in seconds with AI. High-quality cutouts, batch processing, and a developer API." },
+      { name: "keywords", content: "AI background remover, background removal, cutout AI, transparent background, background erase, CutoutAI Studio,Reenk Rathod" },
+      { name: "robots", content: "index, follow" },
+      { name: "author", content: "CutoutAI Studio" },
+      { httpEquiv: "refresh", content: "3600" },
+      { property: "og:title", content: "CutoutAI Studio — Clear Backgrounds, Effortlessly" },
+      { property: "og:description", content: "AI-powered background removal for creators, teams, and developers." },
     ],
   }),
 });
