@@ -14,15 +14,42 @@ export const Route = createFileRoute("/")({
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "CutoutAI Studio — Clear Backgrounds, Effortlessly" },
-      { name: "description", content: "CutoutAI removes image backgrounds in seconds with AI. High-quality cutouts, batch processing, and a developer API." },
-      { name: "keywords", content: "AI background remover, background removal, cutout AI, transparent background, background erase, CutoutAI Studio,Reenk Rathod" },
+      { title: "Cutout AI - Free Background Remover | CutoutAI Studio" },
+      { name: "description", content: "Remove image backgrounds instantly in 1-click for free. Cutout AI (CutoutAI) uses advanced artificial intelligence for pixel-perfect transparency." },
+      { name: "keywords", content: "cutout ai, cutoutai, cutout ai background remover, AI background remover, background removal, transparent background, background erase, free background remover online, Reenk Rathod" },
       { name: "robots", content: "index, follow" },
       { name: "author", content: "CutoutAI Studio" },
       { httpEquiv: "refresh", content: "3600" },
-      { property: "og:title", content: "CutoutAI Studio — Clear Backgrounds, Effortlessly" },
-      { property: "og:description", content: "AI-powered background removal for creators, teams, and developers." },
+      { property: "og:title", content: "Cutout AI - Free Background Remover | CutoutAI Studio" },
+      { property: "og:description", content: "Remove image backgrounds instantly in 1-click for free with Cutout AI." },
+      { property: "og:image", content: "https://cutoutai.studio/favicon.svg" },
+      {
+        "script:ld+json": {
+          "@context": "https://schema.org",
+          "@type": "SoftwareApplication",
+          "name": "Cutout AI Studio",
+          "alternateName": ["CutoutAI", "Cutout AI"],
+          "operatingSystem": "All",
+          "applicationCategory": "MultimediaApplication",
+          "description": "Cutout AI is a next-generation AI tool to instantly remove image backgrounds with pixel-perfect precision.",
+          "offers": {
+            "@type": "Offer",
+            "price": "0",
+            "priceCurrency": "USD"
+          },
+          "featureList": [
+            "AI background removal",
+            "Instant processing",
+            "No sign-up required",
+            "Batch processing",
+            "Developer API access"
+          ]
+        }
+      }
     ],
+    links: [
+      { rel: "canonical", href: "https://cutoutai.studio/" }
+    ]
   }),
 });
 

@@ -211,7 +211,7 @@ export function Hero() {
             <span>Powered by next-gen AI</span>
           </div>
           <h1 className="mt-6 text-4xl font-bold leading-tight tracking-tight sm:text-5xl lg:text-6xl">
-            Remove Backgrounds in <span className="text-gradient">Seconds</span> with CutoutAI
+            Remove Backgrounds in <span className="text-gradient">Seconds</span> with Cutout AI
           </h1>
           <p className="mt-5 max-w-lg text-lg text-muted-foreground">
             Upload your image and let AI instantly remove backgrounds with pixel-perfect precision.
