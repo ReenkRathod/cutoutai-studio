@@ -1,0 +1,6 @@
+# Cloudflare Workers local secrets (wrangler dev).
+# Copy to `.dev.vars` (already gitignored) and fill in real test values.
+
+RAZORPAY_KEY_ID=rzp_test_xxxxxxxxxxxx
+RAZORPAY_KEY_SECRET=your_test_key_secret
+RAZORPAY_WEBHOOK_SECRET=your_webhook_secret

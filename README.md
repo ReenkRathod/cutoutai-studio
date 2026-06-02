@@ -19,14 +19,14 @@ CutoutAI is a web app for AI-powered background removal. Upload or paste an imag
 | Payments | Razorpay (Checkout + REST API) |
 | Deploy | Cloudflare Workers (default) or Vercel (Nitro) |
 
-Background removal is handled by an external n8n webhook; the app POSTs the raw image bytes and expects JSON `{ "url": "<processed-image-url>" }`.
+Background removal is handled via a server-side API route that integrates with the remove.bg API, ensuring high-quality results and a lightweight client.
 
 ## Prerequisites
 
 - [Node.js](https://nodejs.org/) 20+ (22 recommended)
 - npm (or pnpm / yarn)
 - [Razorpay](https://razorpay.com/) test keys (for Pro checkout)
-- A background-removal webhook that accepts `POST` with the image body and returns `{ "url": "..." }`
+- A `REMOVE_BG_API_KEY` from [remove.bg](https://www.remove.bg/api) configured in your `.env` file
 
 ## Getting started
 
@@ -50,6 +50,7 @@ cp .dev.vars.example .dev.vars
 | `RAZORPAY_KEY_SECRET` | server only | Create orders on the server |
 | `RAZORPAY_WEBHOOK_SECRET` | server only | Verify `POST /api/razorpay/webhook` |
 | `PRO_PLAN_AMOUNT_INR` | optional | Pro price in INR (default `1599`) |
+| `REMOVE_BG_API_KEY` | server only | API key for remove.bg background removal |
 
 - **`.env`** — used by Vite during local dev when applicable
 - **`.dev.vars`** — used by Wrangler for Cloudflare Workers local dev (gitignored)
@@ -73,20 +74,13 @@ npm run build
 npm run preview
 ```
 
-## Background removal webhook
+## Background removal architecture
 
-The client sends images to the webhook defined in `src/components/site/Hero.tsx`:
+Background removal is performed via a server-side API route (`/api/remove-bg`) which proxies requests to the remove.bg API. This approach provides several benefits:
 
-```ts
-const REMOVE_BACKGROUND_WEBHOOK =
-  "https://allnighter.app.n8n.cloud/webhook/remove-background";
-```
-
-To use your own pipeline, change that URL (or refactor it to an env-driven value). The endpoint must:
-
-1. Accept `POST` with `Content-Type` matching the uploaded file
-2. Return `200` with JSON: `{ "url": "https://..." }`
-3. Allow browser `fetch` from your app origin (CORS), or proxy the call through a server route
+1. **Consistency**: High-quality removal regardless of the user's hardware or browser.
+2. **Security**: Your API key is kept secret on the server and never exposed to the client.
+3. **Performance**: Reduces the initial load time of the web app by removing the need to download large AI models.
 
 ## Razorpay integration
 
