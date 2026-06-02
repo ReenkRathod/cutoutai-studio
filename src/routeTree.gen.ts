@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ApiVerifyPaymentRouteImport } from './routes/api/verify-payment'
+import { Route as ApiRemoveBgRouteImport } from './routes/api/remove-bg'
 import { Route as ApiCreateOrderRouteImport } from './routes/api/create-order'
 import { Route as ApiRazorpayWebhookRouteImport } from './routes/api/razorpay/webhook'
 import { Route as ApiRazorpayVerifyPaymentRouteImport } from './routes/api/razorpay/verify-payment'
@@ -24,6 +25,11 @@ const IndexRoute = IndexRouteImport.update({
 const ApiVerifyPaymentRoute = ApiVerifyPaymentRouteImport.update({
   id: '/api/verify-payment',
   path: '/api/verify-payment',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiRemoveBgRoute = ApiRemoveBgRouteImport.update({
+  id: '/api/remove-bg',
+  path: '/api/remove-bg',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiCreateOrderRoute = ApiCreateOrderRouteImport.update({
@@ -51,6 +57,7 @@ const ApiRazorpayCreateOrderRoute = ApiRazorpayCreateOrderRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/api/create-order': typeof ApiCreateOrderRoute
+  '/api/remove-bg': typeof ApiRemoveBgRoute
   '/api/verify-payment': typeof ApiVerifyPaymentRoute
   '/api/razorpay/create-order': typeof ApiRazorpayCreateOrderRoute
   '/api/razorpay/verify-payment': typeof ApiRazorpayVerifyPaymentRoute
@@ -59,6 +66,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/api/create-order': typeof ApiCreateOrderRoute
+  '/api/remove-bg': typeof ApiRemoveBgRoute
   '/api/verify-payment': typeof ApiVerifyPaymentRoute
   '/api/razorpay/create-order': typeof ApiRazorpayCreateOrderRoute
   '/api/razorpay/verify-payment': typeof ApiRazorpayVerifyPaymentRoute
@@ -68,6 +76,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/api/create-order': typeof ApiCreateOrderRoute
+  '/api/remove-bg': typeof ApiRemoveBgRoute
   '/api/verify-payment': typeof ApiVerifyPaymentRoute
   '/api/razorpay/create-order': typeof ApiRazorpayCreateOrderRoute
   '/api/razorpay/verify-payment': typeof ApiRazorpayVerifyPaymentRoute
@@ -78,6 +87,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/api/create-order'
+    | '/api/remove-bg'
     | '/api/verify-payment'
     | '/api/razorpay/create-order'
     | '/api/razorpay/verify-payment'
@@ -86,6 +96,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/api/create-order'
+    | '/api/remove-bg'
     | '/api/verify-payment'
     | '/api/razorpay/create-order'
     | '/api/razorpay/verify-payment'
@@ -94,6 +105,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/api/create-order'
+    | '/api/remove-bg'
     | '/api/verify-payment'
     | '/api/razorpay/create-order'
     | '/api/razorpay/verify-payment'
@@ -103,6 +115,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ApiCreateOrderRoute: typeof ApiCreateOrderRoute
+  ApiRemoveBgRoute: typeof ApiRemoveBgRoute
   ApiVerifyPaymentRoute: typeof ApiVerifyPaymentRoute
   ApiRazorpayCreateOrderRoute: typeof ApiRazorpayCreateOrderRoute
   ApiRazorpayVerifyPaymentRoute: typeof ApiRazorpayVerifyPaymentRoute
@@ -123,6 +136,13 @@ declare module '@tanstack/react-router' {
       path: '/api/verify-payment'
       fullPath: '/api/verify-payment'
       preLoaderRoute: typeof ApiVerifyPaymentRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/remove-bg': {
+      id: '/api/remove-bg'
+      path: '/api/remove-bg'
+      fullPath: '/api/remove-bg'
+      preLoaderRoute: typeof ApiRemoveBgRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/create-order': {
@@ -159,6 +179,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ApiCreateOrderRoute: ApiCreateOrderRoute,
+  ApiRemoveBgRoute: ApiRemoveBgRoute,
   ApiVerifyPaymentRoute: ApiVerifyPaymentRoute,
   ApiRazorpayCreateOrderRoute: ApiRazorpayCreateOrderRoute,
   ApiRazorpayVerifyPaymentRoute: ApiRazorpayVerifyPaymentRoute,
