@@ -1,4 +1,5 @@
 import { Twitter, Github, Linkedin, Instagram } from "lucide-react";
+import { Link } from "@tanstack/react-router";
 import { Logo } from "./Logo";
 
 const cols = [
@@ -18,7 +19,9 @@ export function Footer() {
       <div className="mx-auto max-w-6xl relative">
         <div className="grid gap-10 md:grid-cols-5">
           <div className="md:col-span-2">
-            <Logo />
+            <Link to="/">
+              <Logo />
+            </Link>
             <p className="mt-4 max-w-xs text-sm text-white/70">
               Clear backgrounds, effortlessly. AI-powered cutouts for creators, teams, and developers.
             </p>

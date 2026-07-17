@@ -20,16 +20,19 @@ export function Navbar() {
   return (
     <header className="fixed top-0 left-0 right-0 z-50 px-4 pt-4">
       <nav className="glass mx-auto flex max-w-6xl items-center justify-between rounded-2xl px-5 py-3 shadow-soft">
-        <Logo />
+        <Link to="/">
+          <Logo />
+        </Link>
         <div className="hidden md:flex items-center gap-8">
           {links.map((l) => (
-            <a
+            <Link
               key={l.href}
-              href={l.href}
+              to="/"
+              hash={l.href.replace("#", "")}
               className="text-sm font-medium text-muted-foreground transition hover:text-foreground"
             >
               {l.label}
-            </a>
+            </Link>
           ))}
         </div>
         <div className="hidden md:flex items-center gap-4">
@@ -86,14 +89,15 @@ export function Navbar() {
         <div className="glass mx-auto mt-2 max-w-6xl rounded-2xl p-4 md:hidden animate-fade-in">
           <div className="flex flex-col gap-3">
             {links.map((l) => (
-              <a
+              <Link
                 key={l.href}
-                href={l.href}
+                to="/"
+                hash={l.href.replace("#", "")}
                 onClick={() => setOpen(false)}
                 className="text-sm font-medium text-foreground/80"
               >
                 {l.label}
-              </a>
+              </Link>
             ))}
             
             <div className="my-2 h-px w-full bg-border" />

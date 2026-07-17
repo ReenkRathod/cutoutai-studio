@@ -102,7 +102,8 @@ function Dashboard() {
           
           <div className="flex items-center gap-3">
             <Link
-              to="/#demo"
+              to="/"
+              hash="demo"
               className="inline-flex items-center gap-2 rounded-xl bg-gradient-brand px-5 py-2.5 text-sm font-semibold text-white shadow-glow transition hover:scale-105"
             >
               <ImageIcon className="h-4 w-4" />
