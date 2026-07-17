@@ -26,6 +26,9 @@ import {
   loadProcessedBlob,
   type RecentImage,
 } from "@/lib/recent-images";
+import { useAuth } from "@/hooks/use-auth";
+import { supabase } from "@/lib/supabase";
+import { useNavigate } from "@tanstack/react-router";
 
 export function Hero() {
   const [originalImage, setOriginalImage] = useState<string | null>(null);
@@ -43,6 +46,8 @@ export function Hero() {
   const inputRef = useRef<HTMLInputElement>(null);
   const prevOriginalUrlRef = useRef<string | null>(null);
   const prevProcessedUrlRef = useRef<string | null>(null);
+  const { user } = useAuth();
+  const navigate = useNavigate();
 
   // ── helpers ──────────────────────────────────────────────────────────────
 
@@ -53,16 +58,21 @@ export function Hero() {
   // ── on mount: load history & cleanup blob URLs on unmount ────────────────
 
   useEffect(() => {
-    setRecentImages(loadRecentImages());
+    loadRecentImages().then(setRecentImages);
     return () => {
       revokeIfBlob(prevOriginalUrlRef.current);
       revokeIfBlob(prevProcessedUrlRef.current);
     };
-  }, []);
+  }, [user]);
 
   // ── core logic ────────────────────────────────────────────────────────────
 
   const handleFile = useCallback(async (f?: File | null) => {
+    if (!user) {
+      navigate({ to: "/login" });
+      return;
+    }
+    
     if (!f) return;
     if (!f.type.startsWith("image/")) {
       setError("Please upload a valid image file (PNG, JPG, WEBP…).");
@@ -94,8 +104,20 @@ export function Hero() {
       const formData = new FormData();
       formData.append("image", f);
 
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData?.session?.access_token;
+
+      if (!token) {
+        throw new Error("You must be logged in to remove backgrounds.");
+      }
+
+      const startTime = Date.now();
+
       const response = await fetch("/api/remove-bg", {
         method: "POST",
+        headers: {
+          "Authorization": `Bearer ${token}`,
+        },
         body: formData,
       });
 
@@ -103,6 +125,8 @@ export function Hero() {
         const errorText = await response.text();
         throw new Error(errorText || "Server failed to remove background");
       }
+      
+      const processingTimeMs = Date.now() - startTime;
 
       setProgressMessage("Processing image…");
       setProgressPercent(60);
@@ -123,9 +147,10 @@ export function Hero() {
             originalThumb: thumb,
             resultThumb,
             processedBlob: resultBlob,
+            processingTimeMs,
           }),
         )
-        .then(() => setRecentImages(loadRecentImages()))
+        .then(async () => setRecentImages(await loadRecentImages()))
         .catch(console.warn);
     } catch (err: any) {
       console.error("[bg-removal]", err);
@@ -143,11 +168,17 @@ export function Hero() {
         i.type.startsWith("image/"),
       );
       const file = item?.getAsFile();
-      if (file) void handleFile(file);
+      if (file) {
+        if (!user) {
+          navigate({ to: "/login" });
+          return;
+        }
+        void handleFile(file);
+      }
     };
     window.addEventListener("paste", onPaste);
     return () => window.removeEventListener("paste", onPaste);
-  }, [handleFile]);
+  }, [handleFile, user, navigate]);
 
   // open saved result
   const openRecent = useCallback(async (item: RecentImage) => {
@@ -168,7 +199,7 @@ export function Hero() {
     setProcessing(true);
 
     try {
-      const blob = await loadProcessedBlob(item.id);
+      const blob = await loadProcessedBlob(item);
       if (blob) {
         const url = URL.createObjectURL(blob);
         prevProcessedUrlRef.current = url;
@@ -184,11 +215,16 @@ export function Hero() {
   }, []);
 
   // download
-  const downloadProcessed = useCallback(() => {
+  const downloadProcessed = useCallback(async (item?: RecentImage) => {
     if (!processedImage) return;
     setDownloading(true);
     setDownloadError(null);
     try {
+      if (item && item.id) {
+        // Increment download count in DB
+        await supabase.rpc('increment_download', { img_id: item.id });
+      }
+
       const rawBase = (sourceFileName ?? "cutout").replace(/\.[^./\\]+$/, "");
       const base = rawBase || "cutout";
       const a = document.createElement("a");
@@ -207,10 +243,10 @@ export function Hero() {
     }
   }, [processedImage, sourceFileName]);
 
-  const deleteRecent = useCallback(async (e: MouseEvent, id: string) => {
+  const deleteRecent = useCallback(async (e: MouseEvent, item: RecentImage) => {
     e.stopPropagation();
-    await removeRecentImage(id);
-    setRecentImages(loadRecentImages());
+    await removeRecentImage(item);
+    setRecentImages(await loadRecentImages());
   }, []);
 
   const clearRecent = useCallback(async () => {
@@ -281,9 +317,17 @@ export function Hero() {
             onDrop={(e) => {
               e.preventDefault();
               setDrag(false);
+              if (!user) {
+                navigate({ to: "/login" });
+                return;
+              }
               if (!processing) void handleFile(e.dataTransfer.files[0]);
             }}
             onClick={() => {
+              if (!user) {
+                navigate({ to: "/login" });
+                return;
+              }
               if (!processing) inputRef.current?.click();
             }}
             className={`mt-8 rounded-2xl border-2 border-dashed p-8 text-center transition-all ${
@@ -359,7 +403,12 @@ export function Hero() {
                       >
                         <button
                           type="button"
-                          onClick={downloadProcessed}
+                          onClick={() => {
+                            // Find the currently displayed item in recentImages
+                            const activeItem = recentImages.find(i => prevProcessedUrlRef.current && i.storagePath && prevProcessedUrlRef.current.includes(i.storagePath.split('/').pop() || ''));
+                            // Fallback to sourceFileName match if needed, or just pass nothing
+                            void downloadProcessed(activeItem || recentImages[0]);
+                          }}
                           disabled={downloading}
                           className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-border bg-background/90 px-3 py-2 text-xs font-semibold shadow-sm transition hover:bg-muted/80 disabled:pointer-events-none disabled:opacity-60 sm:w-auto"
                         >
@@ -422,7 +471,7 @@ export function Hero() {
               <div className="mb-3 flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2 text-sm font-semibold">
                   <History className="h-4 w-4 text-[var(--neon-purple)]" />
-                  <span>Saved on this device</span>
+                  <span>{user ? "Your History" : "Saved on this device"}</span>
                 </div>
                 <button
                   type="button"
@@ -455,7 +504,7 @@ export function Hero() {
                     </button>
                     <button
                       type="button"
-                      onClick={(e) => deleteRecent(e, item.id)}
+                      onClick={(e) => deleteRecent(e, item)}
                       className="absolute -right-1 -top-1 grid h-6 w-6 place-items-center rounded-full border border-border bg-background text-muted-foreground opacity-0 shadow-sm transition hover:text-foreground group-hover:opacity-100"
                       aria-label="Remove from saved"
                     >
@@ -465,7 +514,7 @@ export function Hero() {
                 ))}
               </div>
               <p className="mt-2 text-xs text-muted-foreground">
-                Up to 24 results stored in your browser. Click a thumbnail to
+                Up to 24 results stored securely in the cloud. Click a thumbnail to
                 reopen.
               </p>
             </div>
@@ -474,7 +523,13 @@ export function Hero() {
           {/* ── CTA buttons ── */}
           <div className="mt-6 flex flex-wrap gap-3">
             <button
-              onClick={() => !processing && inputRef.current?.click()}
+              onClick={() => {
+                if (!user) {
+                  navigate({ to: "/login" });
+                  return;
+                }
+                !processing && inputRef.current?.click();
+              }}
               disabled={processing}
               className="inline-flex items-center gap-2 rounded-xl bg-gradient-brand px-6 py-3 text-sm font-semibold text-white shadow-glow transition hover:scale-105 disabled:cursor-not-allowed disabled:opacity-70"
             >

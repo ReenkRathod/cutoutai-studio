@@ -1,3 +1,5 @@
+import { supabase } from "@/lib/supabase";
+
 export type RecentImage = {
   id: string;
   fileName: string;
@@ -6,89 +8,49 @@ export type RecentImage = {
   originalThumb: string | null;
   /** Small transparent PNG preview of the processed output. */
   resultThumb: string | null;
+  /** Storage path if saved in cloud */
+  storagePath?: string;
+  /** Time taken to process in milliseconds */
+  processingTimeMs?: number;
 };
 
-const STORAGE_KEY = "cutoutai-recent-images-v1";
 const MAX_ITEMS = 24;
 const MAX_THUMB_CHARS = 450_000;
 
-function openDB(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open("cutoutai-images", 1);
-    request.onupgradeneeded = () => {
-      const db = request.result;
-      if (!db.objectStoreNames.contains("images")) {
-        db.createObjectStore("images");
-      }
-    };
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-  });
-}
+// -- MAIN HISTORY LOGIC --
 
-export async function saveProcessedBlob(id: string, blob: Blob): Promise<void> {
-  const db = await openDB();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction("images", "readwrite");
-    const store = tx.objectStore("images");
-    const request = store.put(blob, id);
-    request.onsuccess = () => resolve();
-    request.onerror = () => reject(request.error);
-  });
-}
+// -- MAIN HISTORY LOGIC --
 
-export async function loadProcessedBlob(id: string): Promise<Blob | null> {
-  const db = await openDB();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction("images", "readonly");
-    const store = tx.objectStore("images");
-    const request = store.get(id);
-    request.onsuccess = () => resolve(request.result || null);
-    request.onerror = () => reject(request.error);
-  });
-}
-
-export async function deleteProcessedBlob(id: string): Promise<void> {
-  const db = await openDB();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction("images", "readwrite");
-    const store = tx.objectStore("images");
-    const request = store.delete(id);
-    request.onsuccess = () => resolve();
-    request.onerror = () => reject(request.error);
-  });
-}
-
-export async function clearProcessedBlobs(): Promise<void> {
-  const db = await openDB();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction("images", "readwrite");
-    const store = tx.objectStore("images");
-    const request = store.clear();
-    request.onsuccess = () => resolve();
-    request.onerror = () => reject(request.error);
-  });
-}
-
-export function loadRecentImages(): RecentImage[] {
+export async function loadRecentImages(): Promise<RecentImage[]> {
   if (typeof window === "undefined") return [];
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter((x): x is RecentImage => {
-      if (!x || typeof x !== "object") return false;
-      const o = x as Record<string, unknown>;
-      return (
-        typeof o.id === "string" &&
-        typeof o.fileName === "string" &&
-        typeof o.createdAt === "string"
-      );
-    });
-  } catch {
-    return [];
+
+  const { data: sessionData } = await supabase.auth.getSession();
+  const user = sessionData?.session?.user;
+
+  if (user) {
+    // Cloud fetch
+    const { data, error } = await supabase
+      .from("user_images")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(MAX_ITEMS);
+
+    if (error) {
+      console.error("Failed to load cloud history:", error);
+      return [];
+    }
+
+    return (data || []).map((row) => ({
+      id: row.id,
+      fileName: row.file_name,
+      createdAt: row.created_at,
+      originalThumb: row.original_thumb,
+      resultThumb: row.result_thumb,
+      storagePath: row.storage_path,
+    }));
   }
+  
+  return [];
 }
 
 export async function addRecentImage(entry: {
@@ -96,50 +58,101 @@ export async function addRecentImage(entry: {
   originalThumb: string | null;
   resultThumb: string | null;
   processedBlob: Blob;
+  processingTimeMs?: number;
 }): Promise<RecentImage> {
-  const id = crypto.randomUUID();
-  const item: RecentImage = {
-    id,
-    createdAt: new Date().toISOString(),
-    fileName: entry.fileName,
-    originalThumb:
-      entry.originalThumb && entry.originalThumb.length <= MAX_THUMB_CHARS
-        ? entry.originalThumb
-        : null,
-    resultThumb:
-      entry.resultThumb && entry.resultThumb.length <= MAX_THUMB_CHARS
-        ? entry.resultThumb
-        : null,
-  };
+  const { data: sessionData } = await supabase.auth.getSession();
+  const user = sessionData?.session?.user;
 
-  try {
-    await saveProcessedBlob(id, entry.processedBlob);
-  } catch (err) {
-    console.error("Failed to save processed image to IndexedDB", err);
+  const originalThumb = entry.originalThumb && entry.originalThumb.length <= MAX_THUMB_CHARS ? entry.originalThumb : null;
+  const resultThumb = entry.resultThumb && entry.resultThumb.length <= MAX_THUMB_CHARS ? entry.resultThumb : null;
+
+  if (user) {
+    const id = crypto.randomUUID();
+    const storagePath = `${user.id}/${id}.png`;
+
+    // 1. Upload Blob
+    const { error: uploadError } = await supabase.storage
+      .from("processed_images")
+      .upload(storagePath, entry.processedBlob, { contentType: "image/png" });
+
+    if (uploadError) {
+      console.error("Failed to upload image to storage", uploadError);
+    }
+
+    // 2. Insert metadata
+    const { data, error: insertError } = await supabase
+      .from("user_images")
+      .insert({
+        id,
+        user_id: user.id,
+        file_name: entry.fileName,
+        original_thumb: originalThumb,
+        result_thumb: resultThumb,
+        storage_path: storagePath,
+        processing_time_ms: entry.processingTimeMs || 0,
+      })
+      .select()
+      .single();
+
+    if (insertError) {
+      console.error("Failed to save cloud metadata", insertError);
+    }
+
+    return {
+      id,
+      fileName: entry.fileName,
+      createdAt: data?.created_at || new Date().toISOString(),
+      originalThumb,
+      resultThumb,
+      storagePath,
+      processingTimeMs: entry.processingTimeMs,
+    };
   }
 
-  const next = [item, ...loadRecentImages()].slice(0, MAX_ITEMS);
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-  return item;
+  throw new Error("Must be logged in to save history.");
 }
 
-export async function removeRecentImage(id: string): Promise<void> {
-  const next = loadRecentImages().filter((x) => x.id !== id);
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-  try {
-    await deleteProcessedBlob(id);
-  } catch (err) {
-    console.error("Failed to delete processed blob", err);
+export async function removeRecentImage(item: RecentImage): Promise<void> {
+  const { data: sessionData } = await supabase.auth.getSession();
+  const user = sessionData?.session?.user;
+
+  if (user) {
+    await supabase.from("user_images").delete().eq("id", item.id);
+    if (item.storagePath) {
+      await supabase.storage.from("processed_images").remove([item.storagePath]);
+    }
   }
 }
 
 export async function clearRecentImages(): Promise<void> {
-  localStorage.removeItem(STORAGE_KEY);
-  try {
-    await clearProcessedBlobs();
-  } catch (err) {
-    console.error("Failed to clear processed blobs", err);
+  const { data: sessionData } = await supabase.auth.getSession();
+  const user = sessionData?.session?.user;
+
+  if (user) {
+    const { data: items } = await supabase.from("user_images").select("id, storage_path");
+    if (items && items.length > 0) {
+      const paths = items.map((i) => i.storage_path).filter(Boolean);
+      if (paths.length > 0) {
+        await supabase.storage.from("processed_images").remove(paths);
+      }
+      await supabase.from("user_images").delete().neq("id", "00000000-0000-0000-0000-000000000000"); // Deletes all for user due to RLS
+    }
   }
+}
+
+export async function loadProcessedBlob(item: RecentImage): Promise<Blob | null> {
+  if (item.storagePath) {
+    const { data, error } = await supabase.storage
+      .from("processed_images")
+      .download(item.storagePath);
+    
+    if (error) {
+      console.error("Failed to download cloud blob", error);
+      return null;
+    }
+    return data;
+  }
+  return null;
 }
 
 /** Resize to a small JPEG data URL for localStorage (best-effort). */

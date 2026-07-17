@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { hmacSha256Hex, timingSafeEqual } from "@/lib/razorpay-crypto";
 import { z } from "zod";
+import { createClient } from "@supabase/supabase-js";
 
 // Razorpay webhooks are verified against the raw request body.
 const WebhookEventSchema = z.record(z.any());
@@ -44,12 +45,27 @@ export const Route = createFileRoute("/api/razorpay/webhook")({
             // Still return 200 after signature validation to avoid Razorpay retries for malformed JSON.
             return Response.json({ ok: true, parsed: false });
           }
+
+          const payload = event as any;
+          if (payload.event === "order.paid" || payload.event === "payment.captured") {
+            const userId = payload.payload?.payment?.entity?.notes?.user_id;
+            if (userId) {
+              const supabaseUrl = process.env.SUPABASE_URL;
+              const supabaseKey = process.env.SUPABASE_ANON_KEY;
+              if (supabaseUrl && supabaseKey) {
+                const supabase = createClient(supabaseUrl, supabaseKey);
+                // Upgrade to pro and give 10 credits
+                const { error } = await supabase.rpc("upgrade_user_to_pro", { user_id: userId, extra_credits: 10 });
+                if (error) {
+                  console.error("Failed to upgrade user:", error);
+                }
+              }
+            }
+          }
         }
 
-        // TODO: update your DB / entitlement logic here based on the event payload.
         return Response.json({ ok: true });
       },
     },
   },
 });
-

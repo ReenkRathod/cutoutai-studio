@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { Check, Sparkles } from "lucide-react";
 import { openRazorpayCheckout } from "@/lib/razorpay-checkout";
+import { useAuth } from "@/hooks/use-auth";
+import { useNavigate } from "@tanstack/react-router";
 
 const plans = [
   {
@@ -38,8 +40,14 @@ const plans = [
 export function Pricing() {
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
+  const { user } = useAuth();
+  const navigate = useNavigate();
 
   const payWithRazorpay = async (amountInRupees: number, planName: string) => {
+    if (!user) {
+      navigate({ to: "/login" });
+      return;
+    }
     if (checkoutLoading) return;
     setCheckoutError(null);
     setCheckoutLoading(true);
@@ -53,7 +61,7 @@ export function Pricing() {
           amount: amountPaise,
           currency: "INR",
           receipt: `${planName.toLowerCase()}-${Date.now()}`,
-          notes: { plan: planName },
+          notes: { plan: planName, user_id: user.id },
         }),
       });
 
